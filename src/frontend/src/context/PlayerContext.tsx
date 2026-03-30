@@ -40,9 +40,14 @@ interface PlayerContextValue {
   youtubeVideoId: string | null;
   isLoadingVideo: boolean;
   videoError: boolean;
+  isMiniPlayer: boolean;
+  isPlayerVisible: boolean;
   playSong: (song: Song, queue?: Song[]) => void;
   playNext: () => void;
   playPrev: () => void;
+  minimizePlayer: () => void;
+  expandPlayer: () => void;
+  closePlayer: () => void;
 }
 
 const PlayerContext = createContext<PlayerContextValue | undefined>(undefined);
@@ -54,6 +59,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [youtubeVideoId, setYoutubeVideoId] = useState<string | null>(null);
   const [isLoadingVideo, setIsLoadingVideo] = useState(false);
   const [videoError, setVideoError] = useState(false);
+  const [isMiniPlayer, setIsMiniPlayer] = useState(false);
+  const [isPlayerVisible, setIsPlayerVisible] = useState(false);
 
   const loadVideoForSong = useCallback(
     async (song: Song, newQueue?: Song[]) => {
@@ -64,8 +71,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       if (newQueue) setQueue(newQueue);
       setIsPlaying(true);
       setVideoError(false);
+      setIsPlayerVisible(true);
+      setIsMiniPlayer(false);
 
-      // If the song already has a video ID embedded (from YouTube search), use it directly
       if (song.previewUrl?.startsWith(YT_VIDEO_ID_PREFIX)) {
         const videoId = song.previewUrl.slice(YT_VIDEO_ID_PREFIX.length);
         console.log("[Melody] Using embedded video ID:", videoId);
@@ -74,7 +82,6 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // Fallback: search YouTube for the video ID
       const query = `${song.title} ${song.artist} official audio`;
       console.log("[Melody] Searching YouTube for:", query);
       setIsLoadingVideo(true);
@@ -131,6 +138,22 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     });
   }, [loadVideoForSong]);
 
+  const minimizePlayer = useCallback(() => {
+    setIsMiniPlayer(true);
+  }, []);
+
+  const expandPlayer = useCallback(() => {
+    setIsMiniPlayer(false);
+  }, []);
+
+  const closePlayer = useCallback(() => {
+    setIsPlayerVisible(false);
+    setIsMiniPlayer(false);
+    setIsPlaying(false);
+    setYoutubeVideoId(null);
+    setCurrentSong(null);
+  }, []);
+
   return (
     <PlayerContext.Provider
       value={{
@@ -140,9 +163,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         youtubeVideoId,
         isLoadingVideo,
         videoError,
+        isMiniPlayer,
+        isPlayerVisible,
         playSong,
         playNext,
         playPrev,
+        minimizePlayer,
+        expandPlayer,
+        closePlayer,
       }}
     >
       {children}

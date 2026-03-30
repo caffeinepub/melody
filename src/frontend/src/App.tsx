@@ -1,11 +1,12 @@
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
-import { Download, LogIn, LogOut, Menu } from "lucide-react";
+import { LogIn, LogOut, Menu } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { MusicPreferences, Song } from "./backend.d";
 import { CreatePlaylistModal } from "./components/CreatePlaylistModal";
+import { FloatingPlayer } from "./components/FloatingPlayer";
 import { HomeView } from "./components/HomeView";
 import { LikedSongsView } from "./components/LikedSongsView";
 import { OnboardingScreen } from "./components/OnboardingScreen";
@@ -16,7 +17,6 @@ import { SearchView } from "./components/SearchView";
 import { Sidebar } from "./components/Sidebar";
 import { PlayerProvider, usePlayer } from "./context/PlayerContext";
 import { useInternetIdentity } from "./hooks/useInternetIdentity";
-import { usePwaInstall } from "./hooks/usePwaInstall";
 import {
   useAddSongToPlaylist,
   useCreatePlaylist,
@@ -46,7 +46,6 @@ function AppInner() {
   const [createPlaylistOpen, setCreatePlaylistOpen] = useState(false);
   const [prefsModalOpen, setPrefsModalOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
-  // Initialize preferences from localStorage immediately
   const [preferences, setPreferences] = useState<MusicPreferences | null>(
     () => {
       const loaded = loadPrefsFromStorage();
@@ -61,7 +60,6 @@ function AppInner() {
 
   const { identity, login, clear, isLoggingIn } = useInternetIdentity();
   const isLoggedIn = !!identity;
-  const { canInstall, triggerInstall } = usePwaInstall();
 
   const { data: likedSongs = [] } = useLikedSongs();
   const { data: playlists = [] } = useUserPlaylists();
@@ -73,14 +71,13 @@ function AppInner() {
   const addToPlaylistMutation = useAddSongToPlaylist();
   const removeFromPlaylistMutation = useRemoveSongFromPlaylist();
   const recordPlayMutation = useRecordPlayEvent();
-  const { currentSong } = usePlayer();
+  const { currentSong, isMiniPlayer, isPlayerVisible } = usePlayer();
 
   const recordPlayRef = useRef(recordPlayMutation.mutate);
   recordPlayRef.current = recordPlayMutation.mutate;
   const isLoggedInRef = useRef(isLoggedIn);
   isLoggedInRef.current = isLoggedIn;
 
-  // On mount: if no preferences in localStorage, show onboarding
   useEffect(() => {
     const stored = loadPrefsFromStorage();
     if (!stored) {
@@ -88,15 +85,12 @@ function AppInner() {
     }
   }, []);
 
-  // When logged-in user's backend prefs load, sync to localStorage and state
   useEffect(() => {
     if (!isLoggedIn || prefsLoading) return;
     if (savedPrefs === null) {
-      // Logged in but no backend prefs — show onboarding only if no local prefs
       const local = loadPrefsFromStorage();
       if (!local) setShowOnboarding(true);
     } else if (savedPrefs) {
-      // Backend has prefs — sync them
       setPreferences(savedPrefs);
       savePrefsToStorage(savedPrefs);
       setShowOnboarding(false);
@@ -104,7 +98,6 @@ function AppInner() {
     }
   }, [isLoggedIn, savedPrefs, prefsLoading]);
 
-  // Log preferences whenever they change
   useEffect(() => {
     console.log("[Melody] Current preferences:", preferences);
   }, [preferences]);
@@ -203,6 +196,9 @@ function AppInner() {
     console.log("[Melody] Verified localStorage musicPreferences:", stored);
   }, []);
 
+  // Show full FloatingPlayer inline (above PlayerBar) when not mini
+  const showInlinePlayer = isPlayerVisible && !isMiniPlayer;
+
   return (
     <div className="flex flex-col h-screen bg-background overflow-hidden">
       {showOnboarding && (
@@ -231,7 +227,6 @@ function AppInner() {
 
         <main className="flex-1 flex flex-col min-w-0 bg-background">
           <header className="flex items-center px-4 py-3 border-b border-border gap-3">
-            {/* Hamburger — mobile only */}
             <Button
               data-ocid="nav.toggle"
               size="icon"
@@ -243,21 +238,7 @@ function AppInner() {
               <Menu className="w-5 h-5" />
             </Button>
 
-            {/* Spacer to push auth to right */}
             <div className="flex-1" />
-
-            {/* PWA Install button */}
-            {canInstall && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={triggerInstall}
-                className="gap-1.5 text-xs border-amber-500/50 text-amber-400 hover:bg-amber-500/10"
-              >
-                <Download className="w-3.5 h-3.5" />
-                Install App
-              </Button>
-            )}
 
             {isLoggedIn ? (
               <>
@@ -336,7 +317,13 @@ function AppInner() {
         </main>
       </div>
 
+      {/* Inline expanded player sits above the PlayerBar */}
+      {showInlinePlayer && <FloatingPlayer />}
+
       <PlayerBar />
+
+      {/* Mini player floats fixed over everything */}
+      {isMiniPlayer && <FloatingPlayer />}
 
       <CreatePlaylistModal
         open={createPlaylistOpen}

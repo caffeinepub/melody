@@ -3,7 +3,7 @@ import type { Song } from "../backend.d";
 export const YT_VIDEO_ID_PREFIX = "ytid:";
 
 // Internal API key — users do not need to provide this
-const YOUTUBE_API_KEY = "AIzaSyBZi2_MOtrL2zE1CS2fgj4UTvBD9yR8m9U";
+const YOUTUBE_API_KEY = "AIzaSyAlERX01HXjr4dgDhJ9RooRiDfxrKy4ZJk";
 
 export function getYouTubeApiKey(): string {
   return YOUTUBE_API_KEY;
