@@ -10,6 +10,7 @@ import {
   Settings2,
   Trash2,
 } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import type { PlaylistDTO } from "../backend.d";
 
 type View = "home" | "search" | "liked" | { playlist: string };
@@ -23,6 +24,8 @@ interface SidebarProps {
   isLoggedIn: boolean;
   hasPreferences: boolean;
   onPreferencesEdit: () => void;
+  isOpen: boolean;
+  onClose: () => void;
 }
 
 function isPlaylistView(v: View): v is { playlist: string } {
@@ -38,12 +41,23 @@ export function Sidebar({
   isLoggedIn,
   hasPreferences: _hasPreferences,
   onPreferencesEdit,
+  isOpen,
+  onClose,
 }: SidebarProps) {
-  return (
+  function navigate(v: View) {
+    onViewChange(v);
+    onClose();
+  }
+
+  const sidebarContent = (
     <aside className="w-[240px] flex-shrink-0 flex flex-col bg-sidebar border-r border-border h-full">
       <div className="flex items-center gap-3 px-5 py-6">
-        <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center flex-shrink-0">
-          <span className="text-primary-foreground font-bold text-lg">M</span>
+        <div className="w-10 h-10 rounded-xl overflow-hidden flex-shrink-0 shadow-md">
+          <img
+            src="/assets/uploads/whatsapp_image_2026-03-30_at_11.26.39_am-019d3d51-49a9-707e-a42c-711cc896643d-1.jpeg"
+            alt="Melody logo"
+            className="w-full h-full object-cover"
+          />
         </div>
         <span className="text-xl font-bold text-foreground tracking-tight">
           Melody
@@ -58,7 +72,7 @@ export function Sidebar({
           <button
             type="button"
             data-ocid="nav.link"
-            onClick={() => onViewChange("home")}
+            onClick={() => navigate("home")}
             className={cn(
               "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
               view === "home"
@@ -72,7 +86,7 @@ export function Sidebar({
           <button
             type="button"
             data-ocid="nav.link"
-            onClick={() => onViewChange("search")}
+            onClick={() => navigate("search")}
             className={cn(
               "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
               view === "search"
@@ -86,7 +100,7 @@ export function Sidebar({
           <button
             type="button"
             data-ocid="nav.link"
-            onClick={() => isLoggedIn && onViewChange("liked")}
+            onClick={() => isLoggedIn && navigate("liked")}
             disabled={!isLoggedIn}
             className={cn(
               "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
@@ -114,7 +128,7 @@ export function Sidebar({
                   type="button"
                   data-ocid="playlist.item.1"
                   disabled={!isLoggedIn}
-                  onClick={() => onViewChange({ playlist: pl.name })}
+                  onClick={() => navigate({ playlist: pl.name })}
                   className={cn(
                     "flex-1 flex items-center gap-2 px-3 py-2 rounded-lg transition-colors cursor-pointer text-left",
                     isPlaylistView(view) && view.playlist === pl.name
@@ -156,17 +170,16 @@ export function Sidebar({
       </div>
 
       <div className="p-3 border-t border-border space-y-1">
-        {isLoggedIn && (
-          <Button
-            data-ocid="preferences.open_modal_button"
-            variant="ghost"
-            className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground"
-            onClick={onPreferencesEdit}
-          >
-            <Settings2 className="w-4 h-4" />
-            Edit Preferences
-          </Button>
-        )}
+        {/* Always visible — for both guests and logged-in users */}
+        <Button
+          data-ocid="preferences.open_modal_button"
+          variant="ghost"
+          className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground"
+          onClick={onPreferencesEdit}
+        >
+          <Settings2 className="w-4 h-4" />
+          Edit Your Music Taste
+        </Button>
         <Button
           data-ocid="playlist.open_modal_button"
           variant="ghost"
@@ -179,5 +192,41 @@ export function Sidebar({
         </Button>
       </div>
     </aside>
+  );
+
+  return (
+    <>
+      {/* Desktop: always visible */}
+      <div className="hidden md:flex h-full">{sidebarContent}</div>
+
+      {/* Mobile: overlay drawer */}
+      <AnimatePresence>
+        {isOpen && (
+          <div className="md:hidden fixed inset-0 z-50 flex">
+            {/* Backdrop */}
+            <motion.div
+              key="backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="absolute inset-0 bg-black/50"
+              onClick={onClose}
+            />
+            {/* Drawer */}
+            <motion.div
+              key="drawer"
+              initial={{ x: "-100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "-100%" }}
+              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+              className="relative z-10 h-full"
+            >
+              {sidebarContent}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }

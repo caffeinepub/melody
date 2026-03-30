@@ -15,6 +15,10 @@ import {
   useMusicPreferences,
   useSaveMusicPreferences,
 } from "../hooks/useQueries";
+import {
+  loadPrefsFromStorage,
+  savePrefsToStorage,
+} from "../utils/prefsStorage";
 
 const POPULAR_ARTISTS = [
   "Arijit Singh",
@@ -59,9 +63,14 @@ const LANGUAGES = [
 interface PreferencesModalProps {
   open: boolean;
   onClose: () => void;
+  onSaved?: (prefs: MusicPreferences) => void;
 }
 
-export function PreferencesModal({ open, onClose }: PreferencesModalProps) {
+export function PreferencesModal({
+  open,
+  onClose,
+  onSaved,
+}: PreferencesModalProps) {
   const { data: savedPrefs } = useMusicPreferences();
   const saveMutation = useSaveMusicPreferences();
 
@@ -71,10 +80,14 @@ export function PreferencesModal({ open, onClose }: PreferencesModalProps) {
   const [selectedLanguages, setSelectedLanguages] = useState<string[]>([]);
 
   useEffect(() => {
-    if (open && savedPrefs) {
-      setSelectedArtists(savedPrefs.artists);
-      setSelectedGenres(savedPrefs.genres);
-      setSelectedLanguages(savedPrefs.languages);
+    if (open) {
+      // Load from backend prefs if available, otherwise fall back to localStorage
+      const source = savedPrefs ?? loadPrefsFromStorage();
+      if (source) {
+        setSelectedArtists(source.artists);
+        setSelectedGenres(source.genres);
+        setSelectedLanguages(source.languages);
+      }
     }
   }, [open, savedPrefs]);
 
@@ -106,7 +119,15 @@ export function PreferencesModal({ open, onClose }: PreferencesModalProps) {
       genres: selectedGenres,
       languages: selectedLanguages,
     };
-    await saveMutation.mutateAsync(prefs);
+    // Always save to localStorage first (works for guests too)
+    savePrefsToStorage(prefs);
+    // Notify parent immediately for instant home screen update
+    onSaved?.(prefs);
+    try {
+      await saveMutation.mutateAsync(prefs);
+    } catch {
+      // Backend save may fail for guests — localStorage save is the fallback
+    }
     toast.success("Preferences saved!");
     onClose();
   };
@@ -118,7 +139,7 @@ export function PreferencesModal({ open, onClose }: PreferencesModalProps) {
         className="max-w-lg max-h-[85vh] overflow-y-auto"
       >
         <DialogHeader>
-          <DialogTitle>Edit Music Preferences 🎵</DialogTitle>
+          <DialogTitle>Edit Your Music Taste 🎵</DialogTitle>
         </DialogHeader>
         <div className="space-y-6 mt-2">
           <div>

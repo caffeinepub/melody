@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
-import { LogIn, LogOut } from "lucide-react";
+import { LogIn, LogOut, Menu } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -28,6 +28,7 @@ import {
   useUnlikeSong,
   useUserPlaylists,
 } from "./hooks/useQueries";
+import { loadPrefsFromStorage, savePrefsToStorage } from "./utils/prefsStorage";
 
 type View = "home" | "search" | "liked" | { playlist: string };
 
@@ -40,10 +41,14 @@ function viewKey(v: View): string {
 
 function AppInner() {
   const [view, setView] = useState<View>("home");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [createPlaylistOpen, setCreatePlaylistOpen] = useState(false);
   const [prefsModalOpen, setPrefsModalOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [preferences, setPreferences] = useState<MusicPreferences | null>(null);
+  // Initialize preferences from localStorage immediately
+  const [preferences, setPreferences] = useState<MusicPreferences | null>(() =>
+    loadPrefsFromStorage(),
+  );
 
   const { identity, login, clear, isLoggingIn } = useInternetIdentity();
   const isLoggedIn = !!identity;
@@ -60,31 +65,40 @@ function AppInner() {
   const recordPlayMutation = useRecordPlayEvent();
   const { currentSong } = usePlayer();
 
-  // Keep stable refs for best-effort play recording
   const recordPlayRef = useRef(recordPlayMutation.mutate);
   recordPlayRef.current = recordPlayMutation.mutate;
   const isLoggedInRef = useRef(isLoggedIn);
   isLoggedInRef.current = isLoggedIn;
 
+  // On mount: if no preferences in localStorage, show onboarding
+  useEffect(() => {
+    const stored = loadPrefsFromStorage();
+    if (!stored) {
+      setShowOnboarding(true);
+    }
+  }, []);
+
+  // When logged-in user's backend prefs load, sync to localStorage and state
   useEffect(() => {
     if (!isLoggedIn || prefsLoading) return;
     if (savedPrefs === null) {
-      setShowOnboarding(true);
-    } else {
-      setPreferences(savedPrefs ?? null);
+      // Logged in but no backend prefs — show onboarding only if no local prefs
+      const local = loadPrefsFromStorage();
+      if (!local) setShowOnboarding(true);
+    } else if (savedPrefs) {
+      // Backend has prefs — sync them
+      setPreferences(savedPrefs);
+      savePrefsToStorage(savedPrefs);
       setShowOnboarding(false);
       setView((v) => (v === "search" ? "home" : v));
     }
   }, [isLoggedIn, savedPrefs, prefsLoading]);
 
+  // Log preferences whenever they change
   useEffect(() => {
-    if (!isLoggedIn) {
-      setShowOnboarding(false);
-      setPreferences(null);
-    }
-  }, [isLoggedIn]);
+    console.log("[Melody] Current preferences:", preferences);
+  }, [preferences]);
 
-  // Record play events best-effort using refs to avoid stale closures
   useEffect(() => {
     if (!currentSong || !isLoggedInRef.current) return;
     recordPlayRef.current({
@@ -171,8 +185,10 @@ function AppInner() {
 
   const handleOnboardingComplete = useCallback((prefs: MusicPreferences) => {
     setPreferences(prefs);
+    savePrefsToStorage(prefs);
     setShowOnboarding(false);
     setView("home");
+    console.log("[Melody] Preferences saved from onboarding:", prefs);
   }, []);
 
   return (
@@ -197,13 +213,30 @@ function AppInner() {
           isLoggedIn={isLoggedIn}
           hasPreferences={!!preferences}
           onPreferencesEdit={() => setPrefsModalOpen(true)}
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
         />
 
         <main className="flex-1 flex flex-col min-w-0 bg-background">
-          <header className="flex items-center justify-end px-6 py-3 border-b border-border gap-3">
+          <header className="flex items-center px-4 py-3 border-b border-border gap-3">
+            {/* Hamburger — mobile only */}
+            <Button
+              data-ocid="nav.toggle"
+              size="icon"
+              variant="ghost"
+              className="md:hidden flex-shrink-0"
+              onClick={() => setSidebarOpen((o) => !o)}
+              aria-label="Toggle menu"
+            >
+              <Menu className="w-5 h-5" />
+            </Button>
+
+            {/* Spacer to push auth to right */}
+            <div className="flex-1" />
+
             {isLoggedIn ? (
               <>
-                <span className="text-xs text-muted-foreground truncate max-w-[180px]">
+                <span className="text-xs text-muted-foreground truncate max-w-[140px] hidden sm:inline">
                   {identity?.getPrincipal().toString().slice(0, 12)}…
                 </span>
                 <Button
@@ -288,6 +321,11 @@ function AppInner() {
       <PreferencesModal
         open={prefsModalOpen}
         onClose={() => setPrefsModalOpen(false)}
+        onSaved={(prefs) => {
+          setPreferences(prefs);
+          savePrefsToStorage(prefs);
+          console.log("[Melody] Preferences updated:", prefs);
+        }}
       />
       <Toaster />
     </div>

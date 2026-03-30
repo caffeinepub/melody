@@ -3,137 +3,81 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
-  useRef,
   useState,
 } from "react";
 import type { Song } from "../backend.d";
 
-interface PlayerState {
+interface PlayerContextValue {
   currentSong: Song | null;
   queue: Song[];
   isPlaying: boolean;
-  currentTime: number;
-  duration: number;
   volume: number;
-}
-
-interface PlayerContextValue extends PlayerState {
+  youtubeQuery: string;
   playSong: (song: Song, queue?: Song[]) => void;
   togglePlay: () => void;
   playNext: () => void;
   playPrev: () => void;
-  seek: (time: number) => void;
   setVolume: (vol: number) => void;
-  audioRef: React.RefObject<HTMLAudioElement | null>;
 }
 
 const PlayerContext = createContext<PlayerContextValue | undefined>(undefined);
 
+function buildQuery(song: Song) {
+  return `${song.title} ${song.artist} official audio`;
+}
+
 export function PlayerProvider({ children }: { children: ReactNode }) {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [queue, setQueue] = useState<Song[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
   const [volume, setVolumeState] = useState(0.8);
+  const [youtubeQuery, setYoutubeQuery] = useState("");
 
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    const onTimeUpdate = () => setCurrentTime(audio.currentTime);
-    const onDurationChange = () => setDuration(audio.duration || 0);
-    const onEnded = () => {
-      const idx = queue.findIndex((s) => s.id === currentSong?.id);
-      if (idx >= 0 && idx < queue.length - 1) {
-        const next = queue[idx + 1];
-        setCurrentSong(next);
-        audio.src = next.previewUrl;
-        audio.play().catch(() => {});
-        setIsPlaying(true);
-      } else {
-        setIsPlaying(false);
-      }
-    };
-
-    audio.addEventListener("timeupdate", onTimeUpdate);
-    audio.addEventListener("durationchange", onDurationChange);
-    audio.addEventListener("ended", onEnded);
-    return () => {
-      audio.removeEventListener("timeupdate", onTimeUpdate);
-      audio.removeEventListener("durationchange", onDurationChange);
-      audio.removeEventListener("ended", onEnded);
-    };
-  }, [currentSong, queue]);
-
-  const playSong = useCallback(
-    (song: Song, newQueue?: Song[]) => {
-      const audio = audioRef.current;
-      if (!audio || !song.previewUrl) return;
-      setCurrentSong(song);
-      if (newQueue) setQueue(newQueue);
-      audio.src = song.previewUrl;
-      audio.volume = volume;
-      audio.play().catch(() => {});
-      setIsPlaying(true);
-    },
-    [volume],
-  );
+  const playSong = useCallback((song: Song, newQueue?: Song[]) => {
+    setCurrentSong(song);
+    if (newQueue) setQueue(newQueue);
+    setYoutubeQuery(buildQuery(song));
+    setIsPlaying(true);
+  }, []);
 
   const togglePlay = useCallback(() => {
-    const audio = audioRef.current;
-    if (!audio || !currentSong) return;
-    if (isPlaying) {
-      audio.pause();
-      setIsPlaying(false);
-    } else {
-      audio.play().catch(() => {});
-      setIsPlaying(true);
-    }
-  }, [isPlaying, currentSong]);
+    setIsPlaying((prev) => !prev);
+  }, []);
 
   const playNext = useCallback(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    const idx = queue.findIndex((s) => s.id === currentSong?.id);
-    if (idx >= 0 && idx < queue.length - 1) {
-      const next = queue[idx + 1];
-      setCurrentSong(next);
-      audio.src = next.previewUrl;
-      audio.play().catch(() => {});
-      setIsPlaying(true);
-    }
-  }, [queue, currentSong]);
+    setQueue((q) => {
+      setCurrentSong((cur) => {
+        const idx = q.findIndex((s) => s.id === cur?.id);
+        if (idx >= 0 && idx < q.length - 1) {
+          const next = q[idx + 1];
+          setYoutubeQuery(buildQuery(next));
+          setIsPlaying(true);
+          return next;
+        }
+        return cur;
+      });
+      return q;
+    });
+  }, []);
 
   const playPrev = useCallback(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    const idx = queue.findIndex((s) => s.id === currentSong?.id);
-    if (idx > 0) {
-      const prev = queue[idx - 1];
-      setCurrentSong(prev);
-      audio.src = prev.previewUrl;
-      audio.play().catch(() => {});
-      setIsPlaying(true);
-    } else {
-      audio.currentTime = 0;
-    }
-  }, [queue, currentSong]);
-
-  const seek = useCallback((time: number) => {
-    const audio = audioRef.current;
-    if (audio) {
-      audio.currentTime = time;
-      setCurrentTime(time);
-    }
+    setQueue((q) => {
+      setCurrentSong((cur) => {
+        const idx = q.findIndex((s) => s.id === cur?.id);
+        if (idx > 0) {
+          const prev = q[idx - 1];
+          setYoutubeQuery(buildQuery(prev));
+          setIsPlaying(true);
+          return prev;
+        }
+        return cur;
+      });
+      return q;
+    });
   }, []);
 
   const setVolume = useCallback((vol: number) => {
-    const audio = audioRef.current;
     setVolumeState(vol);
-    if (audio) audio.volume = vol;
   }, []);
 
   return (
@@ -142,20 +86,15 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         currentSong,
         queue,
         isPlaying,
-        currentTime,
-        duration,
         volume,
+        youtubeQuery,
         playSong,
         togglePlay,
         playNext,
         playPrev,
-        seek,
         setVolume,
-        audioRef,
       }}
     >
-      {/* biome-ignore lint/a11y/useMediaCaption: music player audio, captions not applicable */}
-      <audio ref={audioRef} />
       {children}
     </PlayerContext.Provider>
   );

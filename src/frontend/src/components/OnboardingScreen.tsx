@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
 import type { MusicPreferences } from "../backend.d";
 import { useSaveMusicPreferences } from "../hooks/useQueries";
+import { savePrefsToStorage } from "../utils/prefsStorage";
 
 const POPULAR_ARTISTS = [
   "Arijit Singh",
@@ -105,13 +106,25 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       genres: selectedGenres,
       languages: selectedLanguages,
     };
-    await saveMutation.mutateAsync(prefs);
+    // Save to localStorage immediately so it persists even without login
+    savePrefsToStorage(prefs);
+    console.log("[Melody] Onboarding complete, preferences saved:", prefs);
+    try {
+      await saveMutation.mutateAsync(prefs);
+    } catch {
+      // Backend save may fail if not logged in — localStorage save above is the fallback
+    }
     onComplete(prefs);
   };
 
   const handleSkipAll = async () => {
     const prefs: MusicPreferences = { artists: [], genres: [], languages: [] };
-    await saveMutation.mutateAsync(prefs);
+    savePrefsToStorage(prefs);
+    try {
+      await saveMutation.mutateAsync(prefs);
+    } catch {
+      // ok
+    }
     onComplete(prefs);
   };
 
