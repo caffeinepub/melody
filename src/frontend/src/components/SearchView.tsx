@@ -1,10 +1,10 @@
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Search } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { PlaylistDTO, Song } from "../backend.d";
 import { usePlayer } from "../context/PlayerContext";
-import { useSearchMusic } from "../hooks/useQueries";
+import { searchYouTube } from "../utils/youtubeApi";
 import { SongCard } from "./SongCard";
 
 interface SearchViewProps {
@@ -15,10 +15,10 @@ interface SearchViewProps {
 }
 
 const SAMPLE_QUERIES = [
-  "The Beatles",
+  "Arijit Singh",
+  "Bollywood hits",
+  "Lo-fi chill",
   "Taylor Swift",
-  "Daft Punk",
-  "Billie Eilish",
 ];
 
 export function SearchView({
@@ -28,18 +28,36 @@ export function SearchView({
   onAddToPlaylist,
 }: SearchViewProps) {
   const [input, setInput] = useState("");
-  const [debouncedTerm, setDebouncedTerm] = useState("");
-  const { data: songs, isFetching } = useSearchMusic(debouncedTerm);
+  const [songs, setSongs] = useState<Song[]>([]);
+  const [loading, setLoading] = useState(false);
   const { playSong, currentSong } = usePlayer();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTermRef = useRef("");
+
+  const doSearch = useCallback(async (term: string) => {
+    if (!term.trim()) {
+      setSongs([]);
+      return;
+    }
+    lastTermRef.current = term;
+    setLoading(true);
+    const results = await searchYouTube(term, 10);
+    if (lastTermRef.current !== term) return;
+    setSongs(results);
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedTerm(input), 300);
-    return () => clearTimeout(timer);
-  }, [input]);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => doSearch(input), 400);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [input, doSearch]);
 
   const handlePlay = useCallback(
     (song: Song) => {
-      playSong(song, songs ?? []);
+      playSong(song, songs);
     },
     [playSong, songs],
   );
@@ -56,13 +74,14 @@ export function SearchView({
             onChange={(e) => setInput(e.target.value)}
             placeholder="Search for artists, songs, albums…"
             className="pl-10 bg-input border-border text-foreground placeholder:text-muted-foreground rounded-xl h-10"
+            autoFocus
           />
         </div>
       </div>
 
       {/* Results */}
       <div className="flex-1 overflow-y-auto scrollbar-thin px-6 py-4">
-        {!debouncedTerm && !isFetching && (
+        {!input && !loading && (
           <div
             className="flex flex-col items-center justify-center h-full gap-4 text-center"
             data-ocid="search.empty_state"
@@ -73,19 +92,19 @@ export function SearchView({
                 Search for music
               </p>
               <p className="text-sm text-muted-foreground mt-1">
-                Try searching for {SAMPLE_QUERIES.join(", ")}
+                Try: {SAMPLE_QUERIES.join(", ")}
               </p>
             </div>
           </div>
         )}
 
-        {isFetching && (
+        {loading && (
           <div
             data-ocid="search.loading_state"
             className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4"
           >
             {Array.from({ length: 10 }).map((_, i) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: skeleton loader
+              // biome-ignore lint/suspicious/noArrayIndexKey: skeleton
               <div key={i} className="space-y-3">
                 <Skeleton className="aspect-square rounded-lg bg-muted" />
                 <Skeleton className="h-3 w-3/4 bg-muted" />
@@ -95,13 +114,13 @@ export function SearchView({
           </div>
         )}
 
-        {!isFetching && debouncedTerm && songs && songs.length === 0 && (
+        {!loading && input && songs.length === 0 && (
           <div
             className="flex flex-col items-center justify-center h-full"
             data-ocid="search.empty_state"
           >
             <p className="text-lg font-semibold text-foreground">
-              No results for "{debouncedTerm}"
+              No results for "{input}"
             </p>
             <p className="text-sm text-muted-foreground mt-1">
               Try a different search term
@@ -109,10 +128,10 @@ export function SearchView({
           </div>
         )}
 
-        {!isFetching && songs && songs.length > 0 && (
+        {!loading && songs.length > 0 && (
           <>
             <h2 className="text-lg font-semibold text-foreground mb-4">
-              Results for "{debouncedTerm}"
+              Results for "{input}"
             </h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
               {songs.map((song, i) => (

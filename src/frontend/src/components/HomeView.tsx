@@ -4,8 +4,7 @@ import { Play, Settings2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { MusicPreferences, Song } from "../backend.d";
 import { usePlayer } from "../context/PlayerContext";
-import { useActor } from "../hooks/useActor";
-import { parseSearchResults } from "../hooks/useQueries";
+import { searchYouTube } from "../utils/youtubeApi";
 
 interface HomeViewProps {
   preferences: MusicPreferences | null;
@@ -21,7 +20,32 @@ interface Section {
   isPersonalized?: boolean;
 }
 
-const FALLBACK_TERM = "top hits 2024";
+const DEFAULT_SECTIONS: Section[] = [
+  {
+    id: "hindi",
+    title: "Top Hindi Songs",
+    subLabel: "Chart-toppers",
+    searchTerm: "Top Hindi songs 2024",
+  },
+  {
+    id: "bollywood",
+    title: "Bollywood Trending",
+    subLabel: "Desi vibes",
+    searchTerm: "Bollywood trending songs 2024",
+  },
+  {
+    id: "lofi",
+    title: "Lo-fi Chill",
+    subLabel: "Relax & focus",
+    searchTerm: "Lo-fi chill music",
+  },
+  {
+    id: "top",
+    title: "Global Hits",
+    subLabel: "World's most played",
+    searchTerm: "Top songs 2024",
+  },
+];
 
 function buildSections(prefs: MusicPreferences | null): Section[] {
   if (
@@ -30,32 +54,7 @@ function buildSections(prefs: MusicPreferences | null): Section[] {
       prefs.genres.length === 0 &&
       prefs.languages.length === 0)
   ) {
-    return [
-      {
-        id: "trending",
-        title: "Trending Now",
-        subLabel: "What everyone's listening to",
-        searchTerm: "top hits 2024",
-      },
-      {
-        id: "chill",
-        title: "Chill Vibes",
-        subLabel: "Perfect for any mood",
-        searchTerm: "chill vibes",
-      },
-      {
-        id: "indie",
-        title: "Indie Discoveries",
-        subLabel: "Hidden gems awaiting",
-        searchTerm: "indie pop",
-      },
-      {
-        id: "bollywood",
-        title: "Bollywood Beats",
-        subLabel: "Desi hits",
-        searchTerm: "bollywood hits",
-      },
-    ];
+    return DEFAULT_SECTIONS;
   }
 
   const sections: Section[] = [];
@@ -66,7 +65,7 @@ function buildSections(prefs: MusicPreferences | null): Section[] {
       title: i === 0 ? "Based on Your Favorite Artists" : `More from ${artist}`,
       subLabel: `Because you like ${artist}`,
       badge: i === 0 ? "Your Artists" : undefined,
-      searchTerm: artist,
+      searchTerm: `${artist} songs`,
       isPersonalized: true,
     });
   });
@@ -93,15 +92,11 @@ function buildSections(prefs: MusicPreferences | null): Section[] {
     });
   }
 
-  const mixTerms = [...prefs.artists.slice(0, 2), ...prefs.genres.slice(0, 2)];
-  const mixTerm = mixTerms.length > 0 ? mixTerms[0] : "top hits";
   sections.push({
-    id: "recommended",
-    title: "Recommended for You",
-    subLabel: "Made for You ✨",
-    badge: "Made for You",
-    searchTerm: mixTerm,
-    isPersonalized: true,
+    id: "bollywood_fallback",
+    title: "Bollywood Trending",
+    subLabel: "Latest hits",
+    searchTerm: "Bollywood trending songs 2024",
   });
 
   return sections;
@@ -183,53 +178,25 @@ function SectionRow({
   currentSong: Song | null;
   onPlay: (song: Song, queue: Song[]) => void;
 }) {
-  const { actor, isFetching } = useActor();
   const [songs, setSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
-  const [lastFetchedTerm, setLastFetchedTerm] = useState("");
-  const [displayTitle, setDisplayTitle] = useState(section.title);
-  const [displaySubLabel, setDisplaySubLabel] = useState(section.subLabel);
+  const [fetched, setFetched] = useState(false);
 
   useEffect(() => {
-    if (!actor || isFetching) return;
-    if (lastFetchedTerm === section.searchTerm) return;
+    if (fetched) return;
+    setFetched(true);
     setLoading(true);
-    setSongs([]);
 
-    actor
-      .searchMusic(section.searchTerm)
-      .then((raw) => {
-        const results = parseSearchResults(raw).slice(0, 15);
+    searchYouTube(section.searchTerm, 15)
+      .then((results) => {
         console.log(
-          `[Melody] Section "${section.title}" loaded ${results.length} songs for "${section.searchTerm}"`,
+          `[Melody] Section "${section.title}" loaded ${results.length} songs`,
         );
-        if (results.length === 0 && section.isPersonalized) {
-          // Fallback to trending
-          return actor.searchMusic(FALLBACK_TERM).then((fallbackRaw) => {
-            const fallback = parseSearchResults(fallbackRaw).slice(0, 15);
-            setSongs(fallback);
-            setDisplayTitle("Trending Now");
-            setDisplaySubLabel("Popular tracks while we find your music");
-          });
-        }
         setSongs(results);
-        setDisplayTitle(section.title);
-        setDisplaySubLabel(section.subLabel);
       })
       .catch(() => setSongs([]))
-      .finally(() => {
-        setLoading(false);
-        setLastFetchedTerm(section.searchTerm);
-      });
-  }, [
-    actor,
-    isFetching,
-    section.searchTerm,
-    lastFetchedTerm,
-    section.title,
-    section.subLabel,
-    section.isPersonalized,
-  ]);
+      .finally(() => setLoading(false));
+  }, [fetched, section.searchTerm, section.title]);
 
   if (!loading && songs.length === 0) return null;
 
@@ -251,12 +218,12 @@ function SectionRow({
               </span>
             )}
             <h2 className="text-lg font-bold text-foreground">
-              {displayTitle}
+              {section.title}
             </h2>
           </div>
-          {displaySubLabel && (
+          {section.subLabel && (
             <p className="text-xs text-muted-foreground mt-0.5">
-              {displaySubLabel}
+              {section.subLabel}
             </p>
           )}
         </div>
@@ -285,17 +252,12 @@ function SectionRow({
 export function HomeView({ preferences, onEditPreferences }: HomeViewProps) {
   const { playSong, currentSong } = usePlayer();
   const sections = buildSections(preferences);
+
   const hasPrefs =
     preferences &&
     (preferences.artists.length > 0 ||
       preferences.genres.length > 0 ||
       preferences.languages.length > 0);
-
-  const totalPrefsCount = preferences
-    ? preferences.artists.length +
-      preferences.genres.length +
-      preferences.languages.length
-    : 0;
 
   const greeting = () => {
     const h = new Date().getHours();
@@ -320,25 +282,6 @@ export function HomeView({ preferences, onEditPreferences }: HomeViewProps) {
               : "Discover music you'll love"}
           </p>
         </div>
-
-        {hasPrefs && totalPrefsCount < 3 && (
-          <div
-            className="rounded-xl p-4 mb-6 text-sm text-muted-foreground"
-            style={{
-              background: "oklch(0.22 0.04 280 / 0.4)",
-              border: "1px solid oklch(0.4 0.08 280 / 0.3)",
-            }}
-          >
-            💡 Add more preferences for better recommendations
-            <button
-              type="button"
-              onClick={onEditPreferences}
-              className="ml-2 underline text-primary hover:opacity-80"
-            >
-              Add more →
-            </button>
-          </div>
-        )}
 
         {!hasPrefs && (
           <div

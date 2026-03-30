@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
-import { LogIn, LogOut, Menu } from "lucide-react";
+import { Download, LogIn, LogOut, Menu } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -16,6 +16,7 @@ import { SearchView } from "./components/SearchView";
 import { Sidebar } from "./components/Sidebar";
 import { PlayerProvider, usePlayer } from "./context/PlayerContext";
 import { useInternetIdentity } from "./hooks/useInternetIdentity";
+import { usePwaInstall } from "./hooks/usePwaInstall";
 import {
   useAddSongToPlaylist,
   useCreatePlaylist,
@@ -46,12 +47,21 @@ function AppInner() {
   const [prefsModalOpen, setPrefsModalOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   // Initialize preferences from localStorage immediately
-  const [preferences, setPreferences] = useState<MusicPreferences | null>(() =>
-    loadPrefsFromStorage(),
+  const [preferences, setPreferences] = useState<MusicPreferences | null>(
+    () => {
+      const loaded = loadPrefsFromStorage();
+      console.log(
+        "[Melody] Loaded musicPreferences from localStorage:",
+        localStorage.getItem("musicPreferences"),
+      );
+      console.log("[Melody] Parsed preferences on mount:", loaded);
+      return loaded;
+    },
   );
 
   const { identity, login, clear, isLoggingIn } = useInternetIdentity();
   const isLoggedIn = !!identity;
+  const { canInstall, triggerInstall } = usePwaInstall();
 
   const { data: likedSongs = [] } = useLikedSongs();
   const { data: playlists = [] } = useUserPlaylists();
@@ -189,6 +199,8 @@ function AppInner() {
     setShowOnboarding(false);
     setView("home");
     console.log("[Melody] Preferences saved from onboarding:", prefs);
+    const stored = localStorage.getItem("musicPreferences");
+    console.log("[Melody] Verified localStorage musicPreferences:", stored);
   }, []);
 
   return (
@@ -233,6 +245,19 @@ function AppInner() {
 
             {/* Spacer to push auth to right */}
             <div className="flex-1" />
+
+            {/* PWA Install button */}
+            {canInstall && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={triggerInstall}
+                className="gap-1.5 text-xs border-amber-500/50 text-amber-400 hover:bg-amber-500/10"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Install App
+              </Button>
+            )}
 
             {isLoggedIn ? (
               <>
@@ -325,6 +350,11 @@ function AppInner() {
           setPreferences(prefs);
           savePrefsToStorage(prefs);
           console.log("[Melody] Preferences updated:", prefs);
+          const stored = localStorage.getItem("musicPreferences");
+          console.log(
+            "[Melody] Verified localStorage musicPreferences after edit:",
+            stored,
+          );
         }}
       />
       <Toaster />

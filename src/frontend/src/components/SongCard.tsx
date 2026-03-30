@@ -5,12 +5,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { Heart, MoreHorizontal, Music, Play } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
@@ -39,7 +33,6 @@ export function SongCard({
   index,
 }: SongCardProps) {
   const [imgError, setImgError] = useState(false);
-  const hasPreview = !!song.previewUrl;
 
   return (
     <motion.div
@@ -48,7 +41,7 @@ export function SongCard({
       transition={{ delay: index * 0.04, duration: 0.25 }}
       data-ocid={`song.item.${index + 1}`}
       className="group relative bg-card hover:bg-secondary rounded-lg p-3 cursor-pointer transition-colors duration-150"
-      onClick={() => hasPreview && onPlay(song)}
+      onClick={() => onPlay(song)}
     >
       {/* Album art */}
       <div className="relative aspect-square rounded-md overflow-hidden mb-3 bg-muted">
@@ -67,28 +60,18 @@ export function SongCard({
 
         {/* Play overlay */}
         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-150 bg-black/40">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  data-ocid={`song.primary_button.${index + 1}`}
-                  size="icon"
-                  variant="default"
-                  disabled={!hasPreview}
-                  className="rounded-full w-10 h-10 bg-primary hover:bg-primary/90 shadow-lg scale-95 hover:scale-100 transition-transform"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (hasPreview) onPlay(song);
-                  }}
-                >
-                  <Play className="w-4 h-4 fill-primary-foreground text-primary-foreground" />
-                </Button>
-              </TooltipTrigger>
-              {!hasPreview && (
-                <TooltipContent>No preview available</TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
+          <Button
+            data-ocid={`song.primary_button.${index + 1}`}
+            size="icon"
+            variant="default"
+            className="rounded-full w-10 h-10 bg-primary hover:bg-primary/90 shadow-lg scale-95 hover:scale-100 transition-transform"
+            onClick={(e) => {
+              e.stopPropagation();
+              onPlay(song);
+            }}
+          >
+            <Play className="w-4 h-4 fill-primary-foreground text-primary-foreground" />
+          </Button>
         </div>
 
         {/* Currently playing indicator */}
